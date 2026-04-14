@@ -1,0 +1,235 @@
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Orders</h1>
+    <p class="page-subtitle">Create and manage customer orders.</p>
+  </div>
+  <button class="add-order-btn" onclick="openAddOrder()">+ New Order</button>
+</div>
+
+<div class="cards" style="margin-bottom:24px;">
+  <div class="card"><h3>Total Orders</h3><p id="o-total">—</p></div>
+  <div class="card"><h3>Revenue</h3><p id="o-revenue" style="color:#34d399;">—</p></div>
+  <div class="card"><h3>Paid</h3><p id="o-paid" style="color:#34d399;">—</p></div>
+  <div class="card"><h3>Pending</h3><p id="o-pending" style="color:#f87171;">—</p></div>
+</div>
+
+<div class="orders-header">
+  <input type="text" placeholder="Search by client or order ID..." class="search-box" id="order-search" oninput="renderOrders()">
+  <div style="display:flex;gap:8px;">
+    <select id="order-filter" class="search-box" style="width:140px;" onchange="renderOrders()">
+      <option value="">All Status</option>
+      <option value="Paid">Paid</option>
+      <option value="Pending">Pending</option>
+    </select>
+    <button class="btn btn-ghost btn-sm" onclick="renderOrders()">↻ Refresh</button>
+  </div>
+</div>
+
+<div class="table-wrapper">
+<table class="orders-table">
+<thead><tr><th>Order ID</th><th>Date</th><th>Client</th><th>Items</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody id="orders-tbody"></tbody>
+</table>
+</div>
+
+<script>
+function renderOrders() {
+  const q = (document.getElementById('order-search')?.value || '').toLowerCase();
+  const filter = document.getElementById('order-filter')?.value || '';
+  const all = Orders.all();
+  const filtered = all.filter(o => {
+    const matchQ = !q || o.clientName.toLowerCase().includes(q) || o.id.toLowerCase().includes(q);
+    const matchF = !filter || o.status === filter;
+    return matchQ && matchF;
+  });
+
+  const revenue = all.filter(o => o.status==='Paid').reduce((s,o)=>s+o.total,0);
+  document.getElementById('o-total').textContent   = all.length;
+  document.getElementById('o-revenue').textContent = formatINR(revenue);
+  document.getElementById('o-paid').textContent    = all.filter(o=>o.status==='Paid').length;
+  document.getElementById('o-pending').textContent = all.filter(o=>o.status==='Pending').length;
+
+  const rows = filtered.map(o => `<tr>
+    <td><span style="font-family:'Syne',sans-serif;font-weight:700;color:#3b82f6;">${escHtml(o.id)}</span></td>
+    <td style="color:var(--text-secondary);">${escHtml(o.date)}</td>
+    <td>${escHtml(o.clientName)}</td>
+    <td style="color:var(--text-secondary);">${o.items.length} item${o.items.length!==1?'s':''}</td>
+    <td><strong>${formatINR(o.total)}</strong></td>
+    <td><span class="${o.status==='Paid'?'paid':'pending'}">${escHtml(o.status)}</span></td>
+    <td style="display:flex;gap:6px;">
+      <button class="view-btn" onclick="viewOrder('${escHtml(o.id)}')">View</button>
+      ${o.status==='Pending' ? `<button class="view-btn" style="color:var(--green);border-color:rgba(52,211,153,0.25);" onclick="markOrderPaid('${escHtml(o.id)}')">Mark Paid</button>` : ''}
+      <button class="view-btn" style="color:var(--red);border-color:rgba(248,113,113,0.25);" onclick="deleteOrder('${escHtml(o.id)}')">Delete</button>
+    </td>
+  </tr>`).join('');
+
+  document.getElementById('orders-tbody').innerHTML = rows || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:28px;">No orders found.</td></tr>';
+}
+
+function openAddOrder() {
+  const clientOptions = Clients.all().map(c => `<option value="${escHtml(c.id)}">${escHtml(c.name)}</option>`).join('');
+  if (!clientOptions) { Modal.toast('Add a client first', 'error'); return; }
+  const productOptions = () => Products.all().map(p => `<option value="${escHtml(p.id)}" data-price="${p.price}" data-stock="${p.stock}">${escHtml(p.name)} — ₹${p.price} (Stock: ${p.stock})</option>`).join('');
+
+  Modal.open('Create New Order', `
+    <div class="form-group">
+      <label>Client *</label>
+      <select id="f-client"><option value="">— Select Client —</option>${clientOptions}</select>
+    </div>
+    <div class="form-group">
+      <label>Payment Status</label>
+      <select id="f-status">
+        <option value="Pending">Pending</option>
+        <option value="Paid">Paid</option>
+      </select>
+    </div>
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Order Items</div>
+    <div id="order-items-list">
+      <div class="order-item-row">
+        <select class="oi-product" onchange="onProductChange(this)">${productOptions()}</select>
+        <input class="oi-qty" type="number" min="1" value="1" placeholder="Qty" oninput="updateOrderTotal()">
+        <input class="oi-price" type="number" min="0" placeholder="₹" oninput="updateOrderTotal()">
+        <button class="remove-item-btn" onclick="removeOrderItem(this)">×</button>
+      </div>
+    </div>
+    <button class="add-item-btn" onclick="addOrderItem()">+ Add Item</button>
+    <div class="order-total-preview"><span>Order Total</span><strong id="order-total-preview">₹0</strong></div>
+    <div class="form-actions">
+      <button class="btn-cancel" onclick="Modal.close()">Cancel</button>
+      <button class="btn-save" onclick="saveOrder()">Create Order</button>
+    </div>`);
+
+  setTimeout(() => {
+    const firstSel = document.querySelector('.oi-product');
+    if (firstSel) onProductChange(firstSel);
+  }, 50);
+}
+
+function onProductChange(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  const priceEl = sel.closest('.order-item-row').querySelector('.oi-price');
+  if (priceEl && opt) priceEl.value = opt.dataset.price || '';
+  updateOrderTotal();
+}
+
+function addOrderItem() {
+  const productOptions = Products.all().map(p => `<option value="${escHtml(p.id)}" data-price="${p.price}" data-stock="${p.stock}">${escHtml(p.name)} — ₹${p.price} (Stock: ${p.stock})</option>`).join('');
+  const div = document.createElement('div');
+  div.className = 'order-item-row';
+  div.innerHTML = `
+    <select class="oi-product" onchange="onProductChange(this)">${productOptions}</select>
+    <input class="oi-qty" type="number" min="1" value="1" oninput="updateOrderTotal()">
+    <input class="oi-price" type="number" min="0" placeholder="₹" oninput="updateOrderTotal()">
+    <button class="remove-item-btn" onclick="removeOrderItem(this)">×</button>`;
+  document.getElementById('order-items-list').appendChild(div);
+  setTimeout(() => { onProductChange(div.querySelector('.oi-product')); }, 20);
+}
+
+function removeOrderItem(btn) {
+  const rows = document.querySelectorAll('.order-item-row');
+  if (rows.length > 1) { btn.closest('.order-item-row').remove(); updateOrderTotal(); }
+}
+
+function updateOrderTotal() {
+  let total = 0;
+  document.querySelectorAll('.order-item-row').forEach(row => {
+    const qty   = parseFloat(row.querySelector('.oi-qty')?.value) || 0;
+    const price = parseFloat(row.querySelector('.oi-price')?.value) || 0;
+    total += qty * price;
+  });
+  const el = document.getElementById('order-total-preview');
+  if (el) el.textContent = formatINR(total);
+}
+
+function saveOrder() {
+  const clientId = document.getElementById('f-client').value;
+  const status   = document.getElementById('f-status').value;
+  if (!clientId) { Modal.toast('Please select a client', 'error'); return; }
+
+  const items = [];
+  let valid = true;
+  document.querySelectorAll('.order-item-row').forEach(row => {
+    const productId  = row.querySelector('.oi-product').value;
+    const qty        = parseInt(row.querySelector('.oi-qty').value) || 0;
+    const unitPrice  = parseFloat(row.querySelector('.oi-price').value) || 0;
+    if (!productId || qty <= 0) { valid = false; return; }
+    const product = Products.get(productId);
+    if (!product) return;
+    if (qty > product.stock) {
+      Modal.toast(`Not enough stock for "${product.name}" (available: ${product.stock})`, 'error');
+      valid = false; return;
+    }
+    items.push({ productId, productName: product.name, qty, unitPrice });
+  });
+
+  if (!valid || !items.length) { if (!items.length) Modal.toast('Add at least one item', 'error'); return; }
+
+  const order = Orders.create(clientId, items, status);
+  Modal.close();
+  Modal.toast(`Order ${order.id} created! Invoice ${order.invoiceId} auto-generated.`);
+  renderOrders();
+}
+
+function viewOrder(id) {
+  const o = Orders.all().find(ord => ord.id === id);
+  if (!o) return;
+  const itemRows = o.items.map(i => `<tr>
+    <td>${escHtml(i.productName)}</td>
+    <td style="text-align:center;">${i.qty}</td>
+    <td>${formatINR(i.unitPrice)}</td>
+    <td style="font-weight:600;">${formatINR(i.qty * i.unitPrice)}</td>
+  </tr>`).join('');
+  Modal.open('Order ' + o.id, `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px;">
+      <div style="background:#1c2130;border-radius:8px;padding:12px;">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Client</div>
+        <div style="font-weight:600;">${escHtml(o.clientName)}</div>
+      </div>
+      <div style="background:#1c2130;border-radius:8px;padding:12px;">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Date</div>
+        <div style="font-weight:600;">${escHtml(o.date)}</div>
+      </div>
+      <div style="background:#1c2130;border-radius:8px;padding:12px;">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Status</div>
+        <div><span class="${o.status==='Paid'?'paid':'pending'}">${escHtml(o.status)}</span></div>
+      </div>
+    </div>
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Items</div>
+    <div style="background:#1c2130;border-radius:8px;overflow:hidden;margin-bottom:12px;">
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr style="background:rgba(255,255,255,0.03);">
+        <th style="padding:10px 14px;font-size:11px;color:var(--text-muted);text-align:left;">Product</th>
+        <th style="padding:10px 14px;font-size:11px;color:var(--text-muted);text-align:center;">Qty</th>
+        <th style="padding:10px 14px;font-size:11px;color:var(--text-muted);text-align:left;">Unit Price</th>
+        <th style="padding:10px 14px;font-size:11px;color:var(--text-muted);text-align:left;">Total</th>
+      </tr></thead>
+      <tbody>${itemRows}</tbody>
+    </table></div>
+    <div style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+      <span style="font-size:13px;color:#3b82f6;font-weight:600;">Order Total</span>
+      <span style="font-family:'Syne',sans-serif;font-size:24px;font-weight:700;color:#3b82f6;">${formatINR(o.total)}</span>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Invoice: ${escHtml(o.invoiceId)}</div>
+    <div class="form-actions">
+      <button class="btn-cancel" onclick="Modal.close()">Close</button>
+      ${o.status==='Pending'?`<button class="btn-save" onclick="markOrderPaid('${escHtml(o.id)}');Modal.close()">Mark as Paid</button>`:''}
+    </div>`);
+}
+
+function markOrderPaid(id) {
+  Orders.markPaid(id);
+  Modal.toast('Order marked as paid — transaction logged!');
+  renderOrders();
+}
+
+function deleteOrder(id) {
+  Modal.open('Delete Order', `
+    <p class="confirm-msg">Delete order <span class="confirm-name">${escHtml(id)}</span>? This cannot be undone.</p>
+    <div class="form-actions">
+      <button class="btn-cancel" onclick="Modal.close()">Cancel</button>
+      <button class="btn-danger" onclick="Orders.delete('${escHtml(id)}');Modal.close();Modal.toast('Order deleted');renderOrders()">Yes, Delete</button>
+    </div>`);
+}
+
+renderOrders();
+</script>

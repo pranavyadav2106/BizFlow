@@ -1,0 +1,586 @@
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Statistics</h1>
+    <p class="page-subtitle">Visual overview of your business performance.</p>
+  </div>
+  <button class="btn btn-ghost btn-sm" onclick="loadPage('statistics')">↻ Refresh</button>
+</div>
+
+<!-- Summary Cards -->
+<div class="cards" style="margin-bottom:28px;">
+  <div class="card">
+    <div class="card-icon" style="background:rgba(52,211,153,0.1);">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+    </div>
+    <h3>Total Income</h3>
+    <p id="st-income">—</p>
+    <div class="card-trend" id="st-income-sub"></div>
+  </div>
+  <div class="card">
+    <div class="card-icon" style="background:rgba(248,113,113,0.1);">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+    </div>
+    <h3>Total Expenses</h3>
+    <p id="st-expense">—</p>
+    <div class="card-trend" style="color:var(--red);" id="st-expense-sub"></div>
+  </div>
+  <div class="card">
+    <div class="card-icon" style="background:rgba(59,130,246,0.12);">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+    </div>
+    <h3>Net Profit</h3>
+    <p id="st-profit">—</p>
+    <div class="card-trend" id="st-profit-sub"></div>
+  </div>
+  <div class="card">
+    <div class="card-icon" style="background:rgba(167,139,250,0.1);">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+    </div>
+    <h3>Total Orders</h3>
+    <p id="st-orders">—</p>
+    <div class="card-trend" style="color:#a78bfa;" id="st-orders-sub"></div>
+  </div>
+</div>
+
+<!-- Row 1: Income vs Expense Bar + Order Status Doughnut -->
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-bottom:20px;">
+
+  <div class="table-wrapper" style="padding:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <div>
+        <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text-primary);">Income vs Expenses</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Monthly breakdown</div>
+      </div>
+      <select id="bar-year" class="search-box" style="width:100px;padding:6px 10px;font-size:13px;" onchange="renderBarChart()"></select>
+    </div>
+    <canvas id="barChart" height="110"></canvas>
+  </div>
+
+  <div class="table-wrapper" style="padding:24px;">
+    <div style="margin-bottom:20px;">
+      <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text-primary);">Order Status</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Paid vs Pending</div>
+    </div>
+    <canvas id="doughnutChart" height="160"></canvas>
+    <div id="doughnut-legend" style="display:flex;justify-content:center;gap:20px;margin-top:16px;font-size:13px;"></div>
+  </div>
+
+</div>
+
+<!-- Row 2: Monthly Profit Line + Top Clients Bar -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+
+  <div class="table-wrapper" style="padding:24px;">
+    <div style="margin-bottom:20px;">
+      <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text-primary);">Net Profit Trend</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Monthly net profit over time</div>
+    </div>
+    <canvas id="lineChart" height="140"></canvas>
+  </div>
+
+  <div class="table-wrapper" style="padding:24px;">
+    <div style="margin-bottom:20px;">
+      <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text-primary);">Top Clients</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">By total order value</div>
+    </div>
+    <canvas id="clientChart" height="140"></canvas>
+  </div>
+
+</div>
+
+<!-- Row 3: Inventory Status + Expense Breakdown -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+
+  <div class="table-wrapper" style="padding:24px;">
+    <div style="margin-bottom:20px;">
+      <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text-primary);">Inventory Status</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Stock levels across products</div>
+    </div>
+    <canvas id="inventoryChart" height="140"></canvas>
+  </div>
+
+  <div class="table-wrapper" style="padding:24px;">
+    <div style="margin-bottom:20px;">
+      <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text-primary);">Expense Breakdown</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">By transaction type</div>
+    </div>
+    <canvas id="expenseChart" height="140"></canvas>
+    <div id="expense-legend" style="display:flex;justify-content:center;gap:20px;margin-top:16px;font-size:13px;"></div>
+  </div>
+
+</div>
+
+<!-- Recent Performance Table -->
+<h2 class="section-title">Monthly Performance Summary</h2>
+<div class="table-wrapper">
+  <table class="table">
+    <thead>
+      <tr><th>Month</th><th>Income</th><th>Paid Out</th><th>Expenses</th><th>Net Profit</th><th>Orders</th></tr>
+    </thead>
+    <tbody id="perf-tbody"></tbody>
+  </table>
+</div>
+
+<script>
+(function() {
+
+/* ── Chart.js global defaults for dark theme ── */
+function applyDarkDefaults() {
+  if (typeof Chart === 'undefined') return false;
+  Chart.defaults.color           = '#8b90a0';
+  Chart.defaults.borderColor     = 'rgba(255,255,255,0.06)';
+  Chart.defaults.font.family     = "'Outfit', sans-serif";
+  Chart.defaults.font.size       = 12;
+  return true;
+}
+
+/* ── Helpers ── */
+var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function parseDate(str) {
+  // handles "15 Mar 2025" format
+  if (!str) return null;
+  var d = new Date(str);
+  if (!isNaN(d)) return d;
+  // try manual parse for "15 Mar 2025"
+  var parts = str.split(' ');
+  if (parts.length === 3) {
+    return new Date(parts[2] + '-' + parts[1] + '-' + parts[0]);
+  }
+  return null;
+}
+
+function getYears() {
+  var txns = Transactions.all();
+  var years = new Set();
+  txns.forEach(function(t) {
+    var d = parseDate(t.date);
+    if (d) years.add(d.getFullYear());
+  });
+  // always include current year
+  years.add(new Date().getFullYear());
+  return Array.from(years).sort(function(a,b){ return b - a; });
+}
+
+function monthlyData(year) {
+  var txns = Transactions.all();
+  var income   = new Array(12).fill(0);
+  var paidOut  = new Array(12).fill(0);
+  var expenses = new Array(12).fill(0);
+
+  txns.forEach(function(t) {
+    var d = parseDate(t.date);
+    if (!d || d.getFullYear() !== parseInt(year)) return;
+    var m = d.getMonth();
+    if (t.type === 'received') income[m]   += t.amount;
+    else if (t.type === 'paid') paidOut[m] += t.amount;
+    else if (t.type === 'expense') expenses[m] += t.amount;
+  });
+
+  var profit = income.map(function(v, i) { return v - paidOut[i] - expenses[i]; });
+  return { income, paidOut, expenses, profit };
+}
+
+function monthlyOrders(year) {
+  var orders = Orders.all();
+  var counts = new Array(12).fill(0);
+  orders.forEach(function(o) {
+    var d = parseDate(o.date);
+    if (d && d.getFullYear() === parseInt(year)) counts[d.getMonth()]++;
+  });
+  return counts;
+}
+
+/* ── Summary Cards ── */
+function renderCards() {
+  var summary = Transactions.summary();
+  var allOrders = Orders.all();
+  var paid    = allOrders.filter(function(o){ return o.status === 'Paid'; }).length;
+  var pending = allOrders.filter(function(o){ return o.status === 'Pending'; }).length;
+  var totalExp = summary.paid + summary.expenses;
+
+  document.getElementById('st-income').textContent      = formatINR(summary.received);
+  document.getElementById('st-expense').textContent     = formatINR(totalExp);
+  document.getElementById('st-profit').textContent      = formatINR(summary.balance);
+  document.getElementById('st-orders').textContent      = allOrders.length;
+  document.getElementById('st-income-sub').textContent  = Transactions.all().filter(function(t){ return t.type==='received'; }).length + ' payments received';
+  document.getElementById('st-expense-sub').textContent = 'Vendor + misc expenses';
+  document.getElementById('st-profit-sub').style.color  = summary.balance >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('st-profit-sub').textContent  = summary.balance >= 0 ? '↑ Profitable' : '↓ Loss';
+  document.getElementById('st-orders-sub').textContent  = paid + ' paid, ' + pending + ' pending';
+}
+
+/* ── Chart instances (so we can destroy on re-render) ── */
+var charts = {};
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+/* ── 1. Income vs Expense Bar Chart ── */
+function renderBarChart() {
+  var yearEl = document.getElementById('bar-year');
+  var year   = yearEl ? yearEl.value : new Date().getFullYear();
+  var data   = monthlyData(year);
+  destroyChart('bar');
+
+  var ctx = document.getElementById('barChart').getContext('2d');
+  charts['bar'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: MONTHS,
+      datasets: [
+        {
+          label: 'Income',
+          data: data.income,
+          backgroundColor: 'rgba(52,211,153,0.75)',
+          borderColor:     'rgba(52,211,153,1)',
+          borderWidth: 1,
+          borderRadius: 4,
+        },
+        {
+          label: 'Paid Out',
+          data: data.paidOut,
+          backgroundColor: 'rgba(248,113,113,0.65)',
+          borderColor:     'rgba(248,113,113,1)',
+          borderWidth: 1,
+          borderRadius: 4,
+        },
+        {
+          label: 'Expenses',
+          data: data.expenses,
+          backgroundColor: 'rgba(251,146,60,0.65)',
+          borderColor:     'rgba(251,146,60,1)',
+          borderWidth: 1,
+          borderRadius: 4,
+        },
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'top', labels: { boxWidth: 12, padding: 16 } },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) { return ' ' + ctx.dataset.label + ': ' + formatINR(ctx.parsed.y); }
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: {
+            callback: function(v) { return 'Rs.' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v); }
+          }
+        }
+      }
+    }
+  });
+}
+
+/* ── 2. Order Status Doughnut ── */
+function renderDoughnut() {
+  var orders  = Orders.all();
+  var paid    = orders.filter(function(o){ return o.status === 'Paid'; }).length;
+  var pending = orders.filter(function(o){ return o.status === 'Pending'; }).length;
+  destroyChart('doughnut');
+
+  var ctx = document.getElementById('doughnutChart').getContext('2d');
+  charts['doughnut'] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Paid', 'Pending'],
+      datasets: [{
+        data: [paid, pending],
+        backgroundColor: ['rgba(52,211,153,0.8)', 'rgba(248,113,113,0.8)'],
+        borderColor:     ['#34d399', '#f87171'],
+        borderWidth: 2,
+        hoverOffset: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      cutout: '68%',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              var total = ctx.dataset.data.reduce(function(a,b){ return a+b; }, 0);
+              var pct   = total ? Math.round(ctx.parsed / total * 100) : 0;
+              return ' ' + ctx.label + ': ' + ctx.parsed + ' (' + pct + '%)';
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // custom legend
+  document.getElementById('doughnut-legend').innerHTML =
+    '<span style="color:#34d399;">● Paid — ' + paid + '</span>' +
+    '<span style="color:#f87171;">● Pending — ' + pending + '</span>';
+}
+
+/* ── 3. Net Profit Line Chart ── */
+function renderLineChart() {
+  var year = document.getElementById('bar-year') ? document.getElementById('bar-year').value : new Date().getFullYear();
+  var data = monthlyData(year);
+  destroyChart('line');
+
+  var ctx = document.getElementById('lineChart').getContext('2d');
+  charts['line'] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: MONTHS,
+      datasets: [{
+        label: 'Net Profit',
+        data: data.profit,
+        borderColor:     '#3b82f6',
+        backgroundColor: 'rgba(59,130,246,0.1)',
+        borderWidth: 2.5,
+        pointBackgroundColor: '#3b82f6',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        fill: true,
+        tension: 0.4,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) { return ' Net Profit: ' + formatINR(ctx.parsed.y); }
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: {
+            callback: function(v) { return 'Rs.' + (Math.abs(v) >= 1000 ? (v/1000).toFixed(0)+'k' : v); }
+          }
+        }
+      }
+    }
+  });
+}
+
+/* ── 4. Top Clients Horizontal Bar ── */
+function renderClientChart() {
+  var orders  = Orders.all();
+  var totals  = {};
+  orders.forEach(function(o) {
+    totals[o.clientName] = (totals[o.clientName] || 0) + o.total;
+  });
+  var sorted = Object.entries(totals)
+    .sort(function(a,b){ return b[1]-a[1]; })
+    .slice(0, 6);
+
+  destroyChart('client');
+  var ctx = document.getElementById('clientChart').getContext('2d');
+  charts['client'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sorted.map(function(e){ return e[0]; }),
+      datasets: [{
+        label: 'Revenue',
+        data: sorted.map(function(e){ return e[1]; }),
+        backgroundColor: [
+          'rgba(59,130,246,0.75)',
+          'rgba(167,139,250,0.75)',
+          'rgba(52,211,153,0.75)',
+          'rgba(251,146,60,0.75)',
+          'rgba(96,165,250,0.75)',
+          'rgba(248,113,113,0.75)',
+        ],
+        borderRadius: 4,
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) { return ' ' + formatINR(ctx.parsed.x); }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: { callback: function(v){ return 'Rs.' + (v>=1000?(v/1000).toFixed(0)+'k':v); } }
+        },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+/* ── 5. Inventory Bar Chart ── */
+function renderInventoryChart() {
+  var products = Products.all().slice(0, 8);
+  destroyChart('inventory');
+
+  var ctx = document.getElementById('inventoryChart').getContext('2d');
+  charts['inventory'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: products.map(function(p){ return p.name; }),
+      datasets: [{
+        label: 'Stock',
+        data: products.map(function(p){ return p.stock; }),
+        backgroundColor: products.map(function(p) {
+          if (p.stock === 0)  return 'rgba(248,113,113,0.75)';
+          if (p.stock <= 15)  return 'rgba(251,146,60,0.75)';
+          return 'rgba(52,211,153,0.75)';
+        }),
+        borderRadius: 4,
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) { return ' Stock: ' + ctx.parsed.y + ' units'; }
+          }
+        }
+      },
+      scales: {
+        x: { grid: { display: false } },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: { callback: function(v){ return v + ' u'; } }
+        }
+      }
+    }
+  });
+}
+
+/* ── 6. Expense Breakdown Pie ── */
+function renderExpenseChart() {
+  var txns     = Transactions.all();
+  var received = txns.filter(function(t){ return t.type==='received'; }).reduce(function(s,t){ return s+t.amount; }, 0);
+  var paid     = txns.filter(function(t){ return t.type==='paid'; }).reduce(function(s,t){ return s+t.amount; }, 0);
+  var expenses = txns.filter(function(t){ return t.type==='expense'; }).reduce(function(s,t){ return s+t.amount; }, 0);
+  destroyChart('expense');
+
+  var ctx = document.getElementById('expenseChart').getContext('2d');
+  charts['expense'] = new Chart(ctx, {
+    type: 'pie',
+    data: {
+      labels: ['Income', 'Vendor Payments', 'Expenses'],
+      datasets: [{
+        data: [received, paid, expenses],
+        backgroundColor: [
+          'rgba(52,211,153,0.8)',
+          'rgba(248,113,113,0.8)',
+          'rgba(251,146,60,0.8)',
+        ],
+        borderColor: ['#34d399','#f87171','#fb923c'],
+        borderWidth: 2,
+        hoverOffset: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              var total = ctx.dataset.data.reduce(function(a,b){ return a+b; }, 0);
+              var pct   = total ? Math.round(ctx.parsed / total * 100) : 0;
+              return ' ' + ctx.label + ': ' + formatINR(ctx.parsed) + ' (' + pct + '%)';
+            }
+          }
+        }
+      }
+    }
+  });
+
+  document.getElementById('expense-legend').innerHTML =
+    '<span style="color:#34d399;">● Income</span>' +
+    '<span style="color:#f87171;">● Vendor Payments</span>' +
+    '<span style="color:#fb923c;">● Expenses</span>';
+}
+
+/* ── 7. Monthly Performance Table ── */
+function renderPerfTable() {
+  var year = document.getElementById('bar-year') ? document.getElementById('bar-year').value : new Date().getFullYear();
+  var data = monthlyData(year);
+  var orderCounts = monthlyOrders(parseInt(year));
+
+  var rows = MONTHS.map(function(m, i) {
+    var inc  = data.income[i];
+    var paid = data.paidOut[i];
+    var exp  = data.expenses[i];
+    var net  = data.profit[i];
+    var ord  = orderCounts[i];
+    if (!inc && !paid && !exp && !ord) return '';
+    return '<tr>'
+      + '<td><strong>' + m + ' ' + year + '</strong></td>'
+      + '<td style="color:var(--green);font-weight:600;">' + formatINR(inc) + '</td>'
+      + '<td style="color:var(--red);">'    + formatINR(paid) + '</td>'
+      + '<td style="color:var(--orange);">' + formatINR(exp)  + '</td>'
+      + '<td style="font-family:\'Syne\',sans-serif;font-weight:700;color:' + (net >= 0 ? 'var(--green)' : 'var(--red)') + ';">'
+      + (net >= 0 ? '+' : '') + formatINR(net) + '</td>'
+      + '<td>' + ord + '</td>'
+      + '</tr>';
+  }).filter(Boolean).reverse().join('');
+
+  document.getElementById('perf-tbody').innerHTML = rows
+    || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px;">No data for ' + year + ' yet — create some orders!</td></tr>';
+}
+
+/* ── Populate year selector ── */
+function populateYears() {
+  var years = getYears();
+  var sel   = document.getElementById('bar-year');
+  if (!sel) return;
+  sel.innerHTML = years.map(function(y) {
+    return '<option value="' + y + '"' + (y === new Date().getFullYear() ? ' selected' : '') + '>' + y + '</option>';
+  }).join('');
+}
+
+/* ── Render everything ── */
+function renderAll() {
+  if (!applyDarkDefaults()) {
+    // Chart.js not loaded yet, retry
+    setTimeout(renderAll, 200);
+    return;
+  }
+  renderCards();
+  populateYears();
+  renderBarChart();
+  renderDoughnut();
+  renderLineChart();
+  renderClientChart();
+  renderInventoryChart();
+  renderExpenseChart();
+  renderPerfTable();
+}
+
+// year change should re-render bar + line + table
+var yearEl = document.getElementById('bar-year');
+if (yearEl) {
+  yearEl.addEventListener('change', function() {
+    renderBarChart();
+    renderLineChart();
+    renderPerfTable();
+  });
+}
+
+renderAll();
+
+})();
+</script>

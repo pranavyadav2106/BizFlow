@@ -1,0 +1,152 @@
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Inventory</h1>
+    <p class="page-subtitle">Monitor and manage your stock levels.</p>
+  </div>
+  <button class="add-product-btn" onclick="openAddProduct()">+ Add Product</button>
+</div>
+
+<div class="cards" style="margin-bottom:24px;">
+  <div class="card"><h3>Total Products</h3><p id="inv-total">—</p></div>
+  <div class="card"><h3>In Stock</h3><p id="inv-instock" style="color:#34d399;">—</p></div>
+  <div class="card"><h3>Low Stock</h3><p id="inv-low" style="color:#fb923c;">—</p></div>
+  <div class="card"><h3>Out of Stock</h3><p id="inv-out" style="color:#f87171;">—</p></div>
+</div>
+
+<div class="inventory-header">
+  <input type="text" placeholder="Search products..." class="search-box" id="inv-search" oninput="renderInventory()">
+  <button class="btn btn-ghost btn-sm" onclick="renderInventory()">↻ Refresh</button>
+</div>
+
+<div class="table-wrapper">
+<table class="table">
+<thead><tr><th>Product</th><th>SKU</th><th>Stock</th><th>Price</th><th>Vendor</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody id="inv-tbody"></tbody>
+</table>
+</div>
+
+<script>
+function renderInventory() {
+  const q = (document.getElementById('inv-search')?.value || '').toLowerCase();
+  const all = Products.all();
+  const filtered = q ? all.filter(p => p.name.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q)) : all;
+
+  document.getElementById('inv-total').textContent   = all.length;
+  document.getElementById('inv-instock').textContent  = all.filter(p => p.stock > 15).length;
+  document.getElementById('inv-low').textContent      = all.filter(p => p.stock > 0 && p.stock <= 15).length;
+  document.getElementById('inv-out').textContent      = all.filter(p => p.stock === 0).length;
+
+  const rows = filtered.map(p => {
+    const s = Products.stockStatus(p.stock);
+    return `<tr>
+      <td><strong>${escHtml(p.name)}</strong></td>
+      <td style="color:var(--text-muted);font-size:13px;">${escHtml(p.sku||'—')}</td>
+      <td><strong>${p.stock}</strong> units</td>
+      <td>${formatINR(p.price)}</td>
+      <td style="color:var(--text-secondary);">${escHtml(p.vendorName||'—')}</td>
+      <td><span class="${s.cls}">${s.label}</span></td>
+      <td style="display:flex;gap:6px;">
+        <button class="view-btn" onclick="openEditProduct('${escHtml(p.id)}')">Edit</button>
+        <button class="view-btn" onclick="openAdjustStock('${escHtml(p.id)}','${escHtml(p.name)}',${p.stock})">Adjust Stock</button>
+        <button class="view-btn" style="color:var(--red);border-color:rgba(248,113,113,0.25);" onclick="deleteProduct('${escHtml(p.id)}','${escHtml(p.name)}')">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('inv-tbody').innerHTML = rows || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:28px;">No products found.</td></tr>';
+}
+
+function productFormHTML(p = {}) {
+  const vendorOptions = Vendors.all().map(v => `<option value="${escHtml(v.id)}" ${p.vendorId===v.id?'selected':''}>${escHtml(v.name)}</option>`).join('');
+  return `
+    <div class="form-row">
+      <div class="form-group"><label>Product Name *</label><input id="f-pname" value="${escHtml(p.name||'')}" placeholder="e.g. Flour Bag"></div>
+      <div class="form-group"><label>SKU</label><input id="f-sku" value="${escHtml(p.sku||'')}" placeholder="e.g. SKU-001"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Stock (units) *</label><input id="f-stock" type="number" min="0" value="${p.stock||0}"></div>
+      <div class="form-group"><label>Price (₹) *</label><input id="f-price" type="number" min="0" value="${p.price||''}"></div>
+    </div>
+    <div class="form-group"><label>Vendor / Supplier</label>
+      <select id="f-vendor"><option value="">— Select Vendor —</option>${vendorOptions}</select>
+    </div>
+    <div class="form-actions">
+      <button class="btn-cancel" onclick="Modal.close()">Cancel</button>
+      <button class="btn-save" onclick="${p.id?`saveEditProduct('${p.id}')`:'saveAddProduct()'}">Save Product</button>
+    </div>`;
+}
+
+function openAddProduct() { Modal.open('Add New Product', productFormHTML()); }
+
+function openEditProduct(id) {
+  const p = Products.get(id);
+  if (p) Modal.open('Edit Product', productFormHTML(p));
+}
+
+function _getProductForm() {
+  const name = document.getElementById('f-pname').value.trim();
+  const stock = parseInt(document.getElementById('f-stock').value) || 0;
+  const price = parseFloat(document.getElementById('f-price').value) || 0;
+  const vendorEl = document.getElementById('f-vendor');
+  const vendorId = vendorEl.value;
+  const vendorName = vendorId ? Vendors.get(vendorId)?.name : '';
+  return { name, stock, price, sku: document.getElementById('f-sku').value.trim(), vendorId, vendorName };
+}
+
+function saveAddProduct() {
+  const data = _getProductForm();
+  if (!data.name) { Modal.toast('Product name is required', 'error'); return; }
+  Products.add(data); Modal.close(); Modal.toast('Product added'); renderInventory();
+}
+
+function saveEditProduct(id) {
+  const data = _getProductForm();
+  if (!data.name) { Modal.toast('Product name is required', 'error'); return; }
+  Products.update(id, data); Modal.close(); Modal.toast('Product updated'); renderInventory();
+}
+
+function openAdjustStock(id, name, current) {
+  Modal.open('Adjust Stock — ' + name, `
+    <div style="background:#1c2130;border-radius:8px;padding:14px;margin-bottom:18px;">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">Current Stock</div>
+      <div style="font-family:'Syne',sans-serif;font-size:28px;font-weight:700;">${current} units</div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Adjustment Type</label>
+        <select id="f-adj-type">
+          <option value="add">Add Stock (+)</option>
+          <option value="remove">Remove Stock (−)</option>
+          <option value="set">Set Exact Value</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Quantity</label>
+        <input id="f-adj-qty" type="number" min="0" placeholder="0">
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-cancel" onclick="Modal.close()">Cancel</button>
+      <button class="btn-save" onclick="saveAdjustStock('${id}',${current})">Update Stock</button>
+    </div>`);
+}
+
+function saveAdjustStock(id, current) {
+  const type = document.getElementById('f-adj-type').value;
+  const qty  = parseInt(document.getElementById('f-adj-qty').value) || 0;
+  let delta = type === 'add' ? qty : type === 'remove' ? -qty : (qty - current);
+  Products.adjustStock(id, delta);
+  Modal.close(); Modal.toast('Stock updated'); renderInventory();
+}
+
+function deleteProduct(id, name) {
+  Modal.open('Delete Product', `
+    <p class="confirm-msg">Delete <span class="confirm-name">${escHtml(name)}</span>? This cannot be undone.</p>
+    <div class="form-actions">
+      <button class="btn-cancel" onclick="Modal.close()">Cancel</button>
+      <button class="btn-danger" onclick="Products.delete('${id}');Modal.close();Modal.toast('Product deleted');renderInventory()">Yes, Delete</button>
+    </div>`);
+}
+
+renderInventory();
+</script>

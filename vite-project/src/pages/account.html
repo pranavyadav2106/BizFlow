@@ -1,0 +1,132 @@
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Account</h1>
+    <p class="page-subtitle">Financial overview and transaction history.</p>
+  </div>
+  <button class="btn btn-ghost btn-sm" onclick="openAddExpense()">+ Log Expense</button>
+</div>
+
+<div class="cards" style="margin-bottom:28px;">
+  <div class="card">
+    <div class="card-icon" style="background:rgba(52,211,153,0.1);">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+    </div>
+    <h3>Total Received</h3>
+    <p id="acc-received">—</p>
+    <div class="card-trend" id="acc-received-sub"></div>
+  </div>
+  <div class="card">
+    <div class="card-icon" style="background:rgba(248,113,113,0.1);">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+    </div>
+    <h3>Total Paid Out</h3>
+    <p id="acc-paid">—</p>
+    <div class="card-trend" style="color:var(--red);" id="acc-paid-sub"></div>
+  </div>
+  <div class="card">
+    <div class="card-icon" style="background:rgba(251,146,60,0.1);">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fb923c" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    </div>
+    <h3>Expenses</h3>
+    <p id="acc-expenses">—</p>
+    <div class="card-trend" style="color:var(--orange);" id="acc-expenses-sub"></div>
+  </div>
+  <div class="card">
+    <div class="card-icon" style="background:rgba(59,130,246,0.12);">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+    </div>
+    <h3>Net Balance</h3>
+    <p id="acc-balance" style="color:#3b82f6;">—</p>
+  </div>
+</div>
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+  <input type="text" placeholder="Search transactions..." class="search-box" id="txn-search" oninput="renderTransactions()">
+  <select id="txn-filter" class="search-box" style="width:160px;" onchange="renderTransactions()">
+    <option value="">All Types</option>
+    <option value="received">Received</option>
+    <option value="paid">Paid Out</option>
+    <option value="expense">Expense</option>
+  </select>
+</div>
+
+<div class="table-wrapper">
+<table class="table">
+<thead><tr><th>Date</th><th>Type</th><th>Entity</th><th>Reference</th><th>Note</th><th>Amount</th></tr></thead>
+<tbody id="txn-tbody"></tbody>
+</table>
+</div>
+
+<script>
+function renderTransactions() {
+  const q = (document.getElementById('txn-search')?.value || '').toLowerCase();
+  const filter = document.getElementById('txn-filter')?.value || '';
+  const all = Transactions.all();
+  const filtered = all.filter(t => {
+    const matchQ = !q || t.entity.toLowerCase().includes(q) || (t.note||'').toLowerCase().includes(q) || (t.reference||'').toLowerCase().includes(q);
+    const matchF = !filter || t.type === filter;
+    return matchQ && matchF;
+  });
+
+  const summary = Transactions.summary();
+  const receivedCount = all.filter(t=>t.type==='received').length;
+  const paidCount     = all.filter(t=>t.type==='paid').length;
+  const expenseCount  = all.filter(t=>t.type==='expense').length;
+
+  document.getElementById('acc-received').textContent     = formatINR(summary.received);
+  document.getElementById('acc-paid').textContent         = formatINR(summary.paid);
+  document.getElementById('acc-expenses').textContent     = formatINR(summary.expenses);
+  document.getElementById('acc-balance').textContent      = formatINR(summary.balance);
+  document.getElementById('acc-received-sub').textContent = receivedCount + ' transactions';
+  document.getElementById('acc-paid-sub').textContent     = paidCount + ' payments';
+  document.getElementById('acc-expenses-sub').textContent = expenseCount + ' entries';
+
+  const typeMeta = {
+    received: { label:'Received', bg:'rgba(52,211,153,0.1)',  color:'var(--green)' },
+    paid:     { label:'Paid Out', bg:'rgba(248,113,113,0.1)', color:'var(--red)'   },
+    expense:  { label:'Expense',  bg:'rgba(251,146,60,0.1)',  color:'var(--orange)'},
+  };
+
+  const rows = filtered.map(t => {
+    const m = typeMeta[t.type] || { label: t.type, bg:'#1c2130', color:'var(--text-secondary)' };
+    const sign = t.type === 'received' ? '+' : '−';
+    const amtColor = t.type === 'received' ? 'var(--green)' : 'var(--red)';
+    return `<tr>
+      <td style="color:var(--text-secondary);">${escHtml(t.date)}</td>
+      <td><span style="background:${m.bg};color:${m.color};padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:600;">${m.label}</span></td>
+      <td><strong>${escHtml(t.entity)}</strong></td>
+      <td style="color:var(--text-muted);font-size:13px;">${escHtml(t.reference||'—')}</td>
+      <td style="color:var(--text-secondary);font-size:13px;">${escHtml(t.note||'—')}</td>
+      <td style="color:${amtColor};font-weight:700;font-family:'Syne',sans-serif;">${sign}${formatINR(t.amount)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('txn-tbody').innerHTML = rows || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:28px;">No transactions found.</td></tr>';
+}
+
+function openAddExpense() {
+  Modal.open('Log Expense', `
+    <div class="form-row">
+      <div class="form-group"><label>Paid To *</label><input id="f-exp-entity" placeholder="e.g. Transport, Rent"></div>
+      <div class="form-group"><label>Amount (₹) *</label><input id="f-exp-amount" type="number" min="0" placeholder="0"></div>
+    </div>
+    <div class="form-group"><label>Note</label><input id="f-exp-note" placeholder="What was this expense for?"></div>
+    <div class="form-actions">
+      <button class="btn-cancel" onclick="Modal.close()">Cancel</button>
+      <button class="btn-save" onclick="saveExpense()">Log Expense</button>
+    </div>`);
+}
+
+function saveExpense() {
+  const entity = document.getElementById('f-exp-entity').value.trim();
+  const amount = parseFloat(document.getElementById('f-exp-amount').value) || 0;
+  const note   = document.getElementById('f-exp-note').value.trim();
+  if (!entity) { Modal.toast('Please enter who was paid', 'error'); return; }
+  if (!amount) { Modal.toast('Please enter an amount', 'error'); return; }
+  Transactions.addExpense(entity, amount, note);
+  Modal.close(); Modal.toast('Expense logged');
+  renderTransactions();
+}
+
+renderTransactions();
+</script>

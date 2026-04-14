@@ -1,0 +1,178 @@
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Clients</h1>
+    <p class="page-subtitle">Manage your customer relationships.</p>
+  </div>
+  <button class="add-client-btn" onclick="openAddClient()">+ Add Client</button>
+</div>
+
+<div class="cards" style="margin-bottom:24px;">
+  <div class="card"><h3>Total Clients</h3><p id="c-total">—</p></div>
+  <div class="card"><h3>Active</h3><p id="c-active" style="color:#34d399;">—</p></div>
+  <div class="card"><h3>Outstanding</h3><p id="c-outstanding" style="color:#f87171;">—</p></div>
+  <div class="card"><h3>Total Orders</h3><p id="c-orders">—</p></div>
+</div>
+
+<div class="clients-header">
+  <input type="text" placeholder="Search clients..." class="search-box" id="client-search" oninput="renderClients()">
+  <button class="btn btn-ghost btn-sm" onclick="renderClients()">↻ Refresh</button>
+</div>
+
+<div class="table-wrapper">
+<table class="table">
+<thead><tr><th>Client</th><th>Contact</th><th>City</th><th>Orders</th><th>Outstanding</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody id="clients-tbody"></tbody>
+</table>
+</div>
+
+<script>
+const COLORS = [
+  {bg:'rgba(59,130,246,0.13)',color:'#3b82f6'},
+  {bg:'rgba(52,211,153,0.1)',color:'#34d399'},
+  {bg:'rgba(251,146,60,0.1)',color:'#fb923c'},
+  {bg:'rgba(167,139,250,0.1)',color:'#a78bfa'},
+  {bg:'rgba(96,165,250,0.1)',color:'#60a5fa'},
+];
+
+function clientColor(i) { return COLORS[i % COLORS.length]; }
+
+function renderClients() {
+  const q = (document.getElementById('client-search')?.value || '').toLowerCase();
+  const all = Clients.all();
+  const filtered = q ? all.filter(c => c.name.toLowerCase().includes(q) || (c.city||'').toLowerCase().includes(q)) : all;
+
+  let totalOutstanding = 0, totalOrders = 0;
+  const rows = filtered.map((c, i) => {
+    const stats = Clients.stats(c.id);
+    totalOutstanding += stats.outstanding;
+    totalOrders += stats.totalOrders;
+    const col = clientColor(i);
+    const hasDue = stats.outstanding > 0;
+    return `<tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="avatar" style="background:${col.bg};color:${col.color};">${escHtml(c.name[0])}</div>
+          <strong>${escHtml(c.name)}</strong>
+        </div>
+      </td>
+      <td style="color:var(--text-secondary);">${escHtml(c.phone||'—')}</td>
+      <td style="color:var(--text-secondary);">${escHtml(c.city||'—')}</td>
+      <td>${stats.totalOrders}</td>
+      <td style="color:${hasDue?'var(--red)':'var(--text-secondary)'};">${hasDue ? formatINR(stats.outstanding) : '₹0'}</td>
+      <td><span class="${hasDue?'pending':'paid'}">${hasDue?'Due':'Active'}</span></td>
+      <td style="display:flex;gap:6px;">
+        <button class="view-btn" onclick="viewClient('${escHtml(c.id)}')">View</button>
+        <button class="view-btn" onclick="openEditClient('${escHtml(c.id)}')">Edit</button>
+        <button class="view-btn" style="color:var(--red);border-color:rgba(248,113,113,0.25);" onclick="deleteClient('${escHtml(c.id)}','${escHtml(c.name)}')">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('clients-tbody').innerHTML = rows || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:28px;">No clients found.</td></tr>';
+  document.getElementById('c-total').textContent = all.length;
+  document.getElementById('c-active').textContent = all.filter(c => Clients.stats(c.id).outstanding === 0).length;
+  document.getElementById('c-outstanding').textContent = formatINR(totalOutstanding);
+  document.getElementById('c-orders').textContent = totalOrders;
+}
+
+function clientFormHTML(c = {}) {
+  return `
+    <div class="form-row">
+      <div class="form-group"><label>Full Name *</label><input id="f-name" value="${escHtml(c.name||'')}" placeholder="e.g. Rahul Traders"></div>
+      <div class="form-group"><label>City</label><input id="f-city" value="${escHtml(c.city||'')}" placeholder="e.g. Mumbai"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Phone</label><input id="f-phone" value="${escHtml(c.phone||'')}" placeholder="+91 XXXXX XXXXX"></div>
+      <div class="form-group"><label>Email</label><input id="f-email" value="${escHtml(c.email||'')}" placeholder="email@example.com"></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-cancel" onclick="Modal.close()">Cancel</button>
+      <button class="btn-save" onclick="${c.id ? `saveEditClient('${c.id}')` : 'saveAddClient()'}">Save Client</button>
+    </div>`;
+}
+
+function openAddClient() {
+  Modal.open('Add New Client', clientFormHTML());
+}
+
+function openEditClient(id) {
+  const c = Clients.get(id);
+  if (!c) return;
+  Modal.open('Edit Client', clientFormHTML(c));
+}
+
+function saveAddClient() {
+  const name = document.getElementById('f-name').value.trim();
+  if (!name) { Modal.toast('Client name is required', 'error'); return; }
+  Clients.add({ name, city: document.getElementById('f-city').value.trim(), phone: document.getElementById('f-phone').value.trim(), email: document.getElementById('f-email').value.trim() });
+  Modal.close(); Modal.toast('Client added successfully');
+  renderClients();
+}
+
+function saveEditClient(id) {
+  const name = document.getElementById('f-name').value.trim();
+  if (!name) { Modal.toast('Client name is required', 'error'); return; }
+  Clients.update(id, { name, city: document.getElementById('f-city').value.trim(), phone: document.getElementById('f-phone').value.trim(), email: document.getElementById('f-email').value.trim() });
+  Modal.close(); Modal.toast('Client updated');
+  renderClients();
+}
+
+function deleteClient(id, name) {
+  Modal.open('Delete Client', `
+    <p class="confirm-msg">Are you sure you want to delete <span class="confirm-name">${escHtml(name)}</span>? This cannot be undone.</p>
+    <div class="form-actions">
+      <button class="btn-cancel" onclick="Modal.close()">Cancel</button>
+      <button class="btn-danger" onclick="confirmDeleteClient('${id}')">Yes, Delete</button>
+    </div>`);
+}
+
+function confirmDeleteClient(id) {
+  Clients.delete(id); Modal.close(); Modal.toast('Client deleted');
+  renderClients();
+}
+
+function viewClient(id) {
+  const c = Clients.get(id);
+  if (!c) return;
+  const stats = Clients.stats(id);
+  const orders = Orders.all().filter(o => o.clientId === id);
+  const orderRows = orders.map(o => `<tr>
+    <td style="color:#3b82f6;font-weight:700;">${escHtml(o.id)}</td>
+    <td>${escHtml(o.date)}</td><td>${formatINR(o.total)}</td>
+    <td><span class="${o.status==='Paid'?'paid':'pending'}">${o.status}</span></td>
+  </tr>`).join('');
+  Modal.open(c.name, `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px;">
+      <div style="background:#1c2130;border-radius:8px;padding:12px;">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Phone</div>
+        <div style="font-weight:500;">${escHtml(c.phone||'—')}</div>
+      </div>
+      <div style="background:#1c2130;border-radius:8px;padding:12px;">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">City</div>
+        <div style="font-weight:500;">${escHtml(c.city||'—')}</div>
+      </div>
+      <div style="background:#1c2130;border-radius:8px;padding:12px;">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Total Orders</div>
+        <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;">${stats.totalOrders}</div>
+      </div>
+      <div style="background:#1c2130;border-radius:8px;padding:12px;">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Outstanding</div>
+        <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:${stats.outstanding>0?'var(--red)':'var(--green)'};">${formatINR(stats.outstanding)}</div>
+      </div>
+    </div>
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Order History</div>
+    <div style="background:#1c2130;border-radius:8px;overflow:hidden;">
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr style="background:rgba(255,255,255,0.03);">
+        <th style="padding:10px 14px;font-size:11px;color:var(--text-muted);text-align:left;letter-spacing:1px;">ID</th>
+        <th style="padding:10px 14px;font-size:11px;color:var(--text-muted);text-align:left;letter-spacing:1px;">Date</th>
+        <th style="padding:10px 14px;font-size:11px;color:var(--text-muted);text-align:left;letter-spacing:1px;">Amount</th>
+        <th style="padding:10px 14px;font-size:11px;color:var(--text-muted);text-align:left;letter-spacing:1px;">Status</th>
+      </tr></thead>
+      <tbody>${orderRows || '<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--text-muted);">No orders yet</td></tr>'}</tbody>
+    </table></div>
+    <div class="form-actions"><button class="btn-cancel" onclick="Modal.close()">Close</button></div>`);
+}
+
+renderClients();
+</script>

@@ -1,0 +1,364 @@
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Invoice</h1>
+    <p class="page-subtitle">View, manage and export invoices to PDF.</p>
+  </div>
+</div>
+
+<div class="cards" style="margin-bottom:24px;">
+  <div class="card"><h3>Total Invoices</h3><p id="inv-count">—</p></div>
+  <div class="card"><h3>Paid</h3><p id="inv-paid-count" style="color:#34d399;">—</p></div>
+  <div class="card"><h3>Unpaid</h3><p id="inv-unpaid-count" style="color:#f87171;">—</p></div>
+  <div class="card"><h3>Total Value</h3><p id="inv-total-val">—</p></div>
+</div>
+
+<div class="invoice-header">
+  <input type="text" placeholder="Search by client or invoice ID..." class="search-box" id="inv-search" oninput="renderInvoices()">
+  <div style="display:flex;gap:8px;">
+    <select id="inv-filter" class="search-box" style="width:140px;" onchange="renderInvoices()">
+      <option value="">All Status</option>
+      <option value="Paid">Paid</option>
+      <option value="Unpaid">Unpaid</option>
+    </select>
+    <button class="btn btn-ghost btn-sm" onclick="renderInvoices()">&#8635; Refresh</button>
+  </div>
+</div>
+
+<div class="table-wrapper" style="margin-bottom:28px;">
+<table class="table">
+<thead>
+  <tr><th>Invoice #</th><th>Client</th><th>Order</th><th>Issue Date</th><th>Due Date</th><th>Amount</th><th>Status</th><th>Actions</th></tr>
+</thead>
+<tbody id="invoices-tbody"></tbody>
+</table>
+</div>
+
+<div id="invoice-preview-section" style="display:none;">
+  <h2 class="section-title">Invoice Preview</h2>
+  <div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:14px;" id="preview-actions"></div>
+  <div class="invoice-doc" id="invoice-doc-content"></div>
+</div>
+
+<script>
+function renderInvoices() {
+  var q      = (document.getElementById('inv-search') ? document.getElementById('inv-search').value : '').toLowerCase();
+  var filter = document.getElementById('inv-filter') ? document.getElementById('inv-filter').value : '';
+  var all    = Invoices.all();
+  var filtered = all.filter(function(i) {
+    var mQ = !q || i.clientName.toLowerCase().includes(q) || i.id.toLowerCase().includes(q);
+    var mF = !filter || i.status === filter;
+    return mQ && mF;
+  });
+
+  document.getElementById('inv-count').textContent        = all.length;
+  document.getElementById('inv-paid-count').textContent   = all.filter(function(i){ return i.status === 'Paid'; }).length;
+  document.getElementById('inv-unpaid-count').textContent = all.filter(function(i){ return i.status !== 'Paid'; }).length;
+  document.getElementById('inv-total-val').textContent    = formatINR(all.reduce(function(s,i){ return s + i.total; }, 0));
+
+  var rows = filtered.map(function(i) {
+    var markPaidBtn = i.status !== 'Paid'
+      ? '<button class="view-btn" style="color:var(--green);border-color:rgba(52,211,153,0.25);" onclick="markInvoicePaid(\'' + escHtml(i.id) + '\')">Mark Paid</button>'
+      : '';
+    return '<tr>'
+      + '<td><span style="font-family:\'Syne\',sans-serif;font-weight:700;color:#3b82f6;">' + escHtml(i.id) + '</span></td>'
+      + '<td>' + escHtml(i.clientName) + '</td>'
+      + '<td style="color:var(--text-secondary);">' + escHtml(i.orderId || '—') + '</td>'
+      + '<td style="color:var(--text-secondary);">' + escHtml(i.issueDate) + '</td>'
+      + '<td style="color:' + (i.status !== 'Paid' ? 'var(--red)' : 'var(--text-secondary)') + ';">' + escHtml(i.dueDate) + '</td>'
+      + '<td><strong>' + formatINR(i.total) + '</strong></td>'
+      + '<td><span class="' + (i.status === 'Paid' ? 'paid' : 'pending') + '">' + escHtml(i.status) + '</span></td>'
+      + '<td style="display:flex;gap:6px;">'
+      +   '<button class="view-btn" onclick="previewInvoice(\'' + escHtml(i.id) + '\')">Preview</button>'
+      +   '<button class="view-btn" style="color:#3b82f6;border-color:rgba(59,130,246,0.3);" onclick="exportPDF(\'' + escHtml(i.id) + '\')">&#8595; PDF</button>'
+      +   markPaidBtn
+      + '</td>'
+      + '</tr>';
+  }).join('');
+
+  document.getElementById('invoices-tbody').innerHTML = rows
+    || '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:28px;">No invoices found.</td></tr>';
+}
+
+function previewInvoice(id) {
+  var inv = Invoices.get(id);
+  if (!inv) return;
+  var client = Clients.get(inv.clientId);
+
+  var itemRows = inv.items.map(function(i) {
+    return '<tr>'
+      + '<td style="padding:12px 16px;">' + escHtml(i.productName) + '</td>'
+      + '<td style="padding:12px 16px;text-align:center;">' + i.qty + '</td>'
+      + '<td style="padding:12px 16px;">' + formatINR(i.unitPrice) + '</td>'
+      + '<td style="padding:12px 16px;font-weight:600;">' + formatINR(i.qty * i.unitPrice) + '</td>'
+      + '</tr>';
+  }).join('');
+
+  var clientDetail = client
+    ? '<div class="inv-party-detail">' + escHtml(client.city || '') + (client.phone ? ' — ' + escHtml(client.phone) : '') + '</div>'
+      + '<div class="inv-party-detail">' + escHtml(client.email || '') + '</div>'
+    : '';
+
+  var markPaidBtn = inv.status !== 'Paid'
+    ? '<button class="btn-save" onclick="markInvoicePaid(\'' + escHtml(id) + '\')">Mark as Paid</button>'
+    : '';
+
+  document.getElementById('preview-actions').innerHTML =
+    '<button class="view-btn" style="color:#3b82f6;border-color:rgba(59,130,246,0.3);padding:8px 18px;font-size:13.5px;" onclick="exportPDF(\'' + escHtml(id) + '\')">&#8595; Export PDF</button>'
+    + markPaidBtn;
+
+  document.getElementById('invoice-doc-content').innerHTML =
+    '<div class="inv-head">'
+    +   '<div>'
+    +     '<div class="inv-brand-name">BizFlow Co.</div>'
+    +     '<div class="inv-brand-sub">123 Business Park, Mumbai</div>'
+    +     '<div class="inv-brand-sub">GSTIN: 27XXXXX1234X1ZX</div>'
+    +   '</div>'
+    +   '<div>'
+    +     '<div class="inv-badge-id">' + escHtml(inv.id) + '</div>'
+    +     '<div class="inv-meta">Issued: ' + escHtml(inv.issueDate) + '</div>'
+    +     '<div class="inv-meta">Due: ' + escHtml(inv.dueDate) + '</div>'
+    +     '<div style="margin-top:10px;text-align:right;"><span class="' + (inv.status === 'Paid' ? 'paid' : 'pending') + '">● ' + escHtml(inv.status) + '</span></div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="inv-parties">'
+    +   '<div>'
+    +     '<div class="inv-party-label">From</div>'
+    +     '<div class="inv-party-name">BizFlow Co.</div>'
+    +     '<div class="inv-party-detail">123 Business Park, Mumbai</div>'
+    +     '<div class="inv-party-detail">GSTIN: 27XXXXX1234X1ZX</div>'
+    +   '</div>'
+    +   '<div>'
+    +     '<div class="inv-party-label">Bill To</div>'
+    +     '<div class="inv-party-name">' + escHtml(inv.clientName) + '</div>'
+    +     clientDetail
+    +   '</div>'
+    + '</div>'
+    + '<div class="table-wrapper">'
+    + '<table style="width:100%;border-collapse:collapse;">'
+    +   '<thead><tr style="background:rgba(255,255,255,0.025);border-bottom:1px solid rgba(255,255,255,0.05);">'
+    +     '<th style="padding:12px 16px;font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;text-align:left;">Product</th>'
+    +     '<th style="padding:12px 16px;font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;text-align:center;">Qty</th>'
+    +     '<th style="padding:12px 16px;font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;text-align:left;">Unit Price</th>'
+    +     '<th style="padding:12px 16px;font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;text-align:left;">Amount</th>'
+    +   '</tr></thead>'
+    +   '<tbody style="color:var(--text-primary);">' + itemRows + '</tbody>'
+    + '</table></div>'
+    + '<div class="inv-total-row">'
+    +   '<div class="inv-total-box">'
+    +     '<div class="inv-total-label">Total Amount</div>'
+    +     '<div class="inv-total-amt">' + formatINR(inv.total) + '</div>'
+    +   '</div>'
+    + '</div>';
+
+  document.getElementById('invoice-preview-section').style.display = 'block';
+  document.getElementById('invoice-preview-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+function exportPDF(id) {
+  var inv = Invoices.get(id);
+  if (!inv) return;
+
+  if (typeof window.jspdf === 'undefined') {
+    Modal.toast('jsPDF not loaded — make sure jsPDF script is in index.html', 'error');
+    return;
+  }
+
+  var client = Clients.get(inv.clientId);
+  var jsPDF  = window.jspdf.jsPDF;
+  var doc    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  var W = 210, ML = 18, MR = 18, CW = W - ML - MR, Y = 0;
+
+  /* jsPDF Helvetica has no Rs. glyph — use ASCII prefix */
+  function pdfINR(n) {
+    return 'Rs. ' + Number(n).toLocaleString('en-IN');
+  }
+
+  var C = {
+    accent:  [59,  130, 246],
+    dark:    [11,  13,  16 ],
+    text:    [22,  26,  40 ],
+    muted:   [110, 118, 145],
+    border:  [218, 220, 232],
+    green:   [16,  185, 129],
+    red:     [239, 68,  68 ],
+    white:   [255, 255, 255],
+    bgLight: [248, 249, 252],
+    rowAlt:  [243, 245, 250],
+  };
+
+  function sf(size, style, color) {
+    doc.setFontSize(size);
+    doc.setFont('helvetica', style || 'normal');
+    doc.setTextColor.apply(doc, color || C.text);
+  }
+  function hline(y, color, lw) {
+    doc.setDrawColor.apply(doc, color || C.border);
+    doc.setLineWidth(lw || 0.25);
+    doc.line(ML, y, ML + CW, y);
+  }
+  function fillRect(x, y, w, h, bg, r) {
+    doc.setFillColor.apply(doc, bg);
+    doc.setDrawColor(0, 0, 0, 0);
+    r ? doc.roundedRect(x, y, w, h, r, r, 'F') : doc.rect(x, y, w, h, 'F');
+  }
+  function strokeR(x, y, w, h, stroke, lw, r) {
+    doc.setDrawColor.apply(doc, stroke);
+    doc.setLineWidth(lw || 0.25);
+    doc.setFillColor(0,0,0,0);
+    r ? doc.roundedRect(x, y, w, h, r, r, 'S') : doc.rect(x, y, w, h, 'S');
+  }
+
+  /* page bg */
+  fillRect(0, 0, W, 297, C.bgLight);
+  /* dark header */
+  fillRect(0, 0, W, 44, C.dark);
+  fillRect(0, 0, 5, 44, C.accent);
+
+  sf(17, 'bold', C.white);
+  doc.text('BizFlow', ML + 2, 16);
+  sf(7, 'normal', [100, 140, 210]);
+  doc.text('ERP SYSTEM', ML + 2, 22.5);
+  sf(18, 'bold', C.white);
+  doc.text(inv.id, W - MR, 15, { align: 'right' });
+  sf(7.5, 'normal', [140, 175, 220]);
+  doc.text('INVOICE', W - MR, 22.5, { align: 'right' });
+
+  Y = 52;
+
+  /* from/to card */
+  fillRect(ML, Y, CW, 40, C.white);
+  strokeR(ML, Y, CW, 40, C.border, 0.25, 3);
+  var H = CW / 2 - 5;
+
+  sf(6.5, 'bold', C.muted);
+  doc.text('FROM', ML + 7, Y + 9);
+  doc.setDrawColor.apply(doc, C.accent); doc.setLineWidth(0.6);
+  doc.line(ML + 7, Y + 11, ML + 21, Y + 11);
+  sf(10.5, 'bold', C.text);
+  doc.text('BizFlow Co.', ML + 7, Y + 18);
+  sf(8, 'normal', C.muted);
+  doc.text('123 Business Park, Mumbai', ML + 7, Y + 24);
+  doc.text('GSTIN: 27XXXXX1234X1ZX', ML + 7, Y + 30);
+
+  doc.setDrawColor.apply(doc, C.border); doc.setLineWidth(0.25);
+  doc.line(ML + H + 5, Y + 7, ML + H + 5, Y + 33);
+
+  var tx = ML + H + 12;
+  sf(6.5, 'bold', C.muted);
+  doc.text('BILL TO', tx, Y + 9);
+  doc.setDrawColor.apply(doc, C.accent); doc.setLineWidth(0.6);
+  doc.line(tx, Y + 11, tx + 14, Y + 11);
+  sf(10.5, 'bold', C.text);
+  doc.text(inv.clientName, tx, Y + 18);
+  sf(8, 'normal', C.muted);
+  if (client) {
+    var l1 = [client.city, client.phone].filter(Boolean).join('  ·  ');
+    if (l1) doc.text(l1, tx, Y + 24);
+    if (client.email) doc.text(client.email, tx, Y + 30);
+  }
+
+  Y += 48;
+
+  /* meta row */
+  var mW = (CW - 6) / 3;
+  var metas = [
+    { label: 'ISSUE DATE', val: inv.issueDate },
+    { label: 'DUE DATE',   val: inv.dueDate   },
+    { label: 'STATUS',     val: inv.status     },
+  ];
+  metas.forEach(function(m, i) {
+    var bx = ML + i * (mW + 3);
+    fillRect(bx, Y, mW, 21, C.white, 3);
+    strokeR(bx, Y, mW, 21, C.border, 0.25, 3);
+    sf(6.5, 'bold', C.muted);
+    doc.text(m.label, bx + 7, Y + 8);
+    if (m.label === 'STATUS') {
+      var isPaid = m.val === 'Paid';
+      var pb = isPaid ? [236,253,245] : [254,242,242];
+      var pc = isPaid ? C.green : C.red;
+      fillRect(bx + 5, Y + 11.5, mW - 10, 6, pb, 3);
+      strokeR(bx + 5, Y + 11.5, mW - 10, 6, pc, 0.3, 3);
+      sf(7.5, 'bold', pc);
+      doc.text(m.val, bx + mW / 2, Y + 16, { align: 'center' });
+    } else {
+      sf(9, 'bold', C.text);
+      doc.text(m.val, bx + 7, Y + 16.5);
+    }
+  });
+
+  Y += 29;
+
+  /* items table header */
+  fillRect(ML, Y, CW, 10, C.dark);
+  sf(7, 'bold', [170, 190, 220]);
+  var COL = { desc: ML+6, qty: ML+CW*0.62, price: ML+CW*0.76, total: ML+CW-5 };
+  doc.text('DESCRIPTION', COL.desc,  Y + 6.8);
+  doc.text('QTY',         COL.qty,   Y + 6.8, { align: 'center' });
+  doc.text('UNIT PRICE',  COL.price, Y + 6.8, { align: 'right'  });
+  doc.text('AMOUNT',      COL.total, Y + 6.8, { align: 'right'  });
+  Y += 10;
+
+  /* item rows */
+  inv.items.forEach(function(item, idx) {
+    var rH = 11;
+    fillRect(ML, Y, CW, rH, idx % 2 === 0 ? C.white : C.rowAlt);
+    sf(9, 'normal', C.text);
+    doc.text(item.productName, COL.desc, Y + 7.5);
+    sf(9, 'normal', C.muted);
+    doc.text(String(item.qty),            COL.qty,   Y + 7.5, { align: 'center' });
+    doc.text(pdfINR(item.unitPrice),   COL.price, Y + 7.5, { align: 'right'  });
+    sf(9, 'bold', C.text);
+    doc.text(pdfINR(item.qty * item.unitPrice), COL.total, Y + 7.5, { align: 'right' });
+    Y += rH;
+  });
+
+  hline(Y, C.border); Y += 7;
+
+  /* total box */
+  var tW = 90, tX = ML + CW - tW;
+  if (inv.items.length > 1) {
+    sf(8.5, 'normal', C.muted);
+    doc.text('Subtotal', tX, Y + 5);
+    doc.text(pdfINR(inv.total), ML + CW - 8, Y + 5, { align: 'right' });
+    hline(Y + 8, C.border); Y += 11;
+  }
+  fillRect(tX - 3, Y, tW + 3, 17, C.accent, 4);
+  sf(7.5, 'bold', [190, 215, 255]);
+  doc.text('TOTAL AMOUNT', tX + 1, Y + 7);
+  sf(13, 'bold', C.white);
+  doc.text(pdfINR(inv.total), ML + CW - 8, Y + 13, { align: 'right' });
+  Y += 25;
+
+  /* paid watermark */
+  if (inv.status === 'Paid') {
+    doc.saveGraphicsState();
+    doc.setGState(new doc.GState({ opacity: 0.08 }));
+    doc.setTextColor.apply(doc, C.green);
+    doc.setFontSize(68);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PAID', W / 2, 185, { align: 'center', angle: 33 });
+    doc.restoreGraphicsState();
+  }
+
+  /* footer */
+  fillRect(0, 272, W, 25, C.dark);
+  sf(7.5, 'normal', [110, 130, 165]);
+  doc.text('BizFlow Co.  ·  123 Business Park, Mumbai  ·  GSTIN: 27XXXXX1234X1ZX', W / 2, 281, { align: 'center' });
+  sf(7, 'normal', [70, 90, 130]);
+  doc.text('Thank you for your business!', W / 2, 287, { align: 'center' });
+
+  doc.save(inv.id + '_' + inv.clientName.replace(/\s+/g, '_') + '.pdf');
+  Modal.toast(inv.id + ' exported as PDF!');
+}
+
+function markInvoicePaid(id) {
+  Invoices.markPaid(id);
+  Modal.toast('Invoice marked as paid — transaction logged!');
+  renderInvoices();
+  var sec = document.getElementById('invoice-preview-section');
+  if (sec && sec.style.display !== 'none') previewInvoice(id);
+}
+
+renderInvoices();
+</script>
